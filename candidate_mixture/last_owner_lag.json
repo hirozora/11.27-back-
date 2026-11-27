@@ -1,0 +1,77 @@
+{
+  "development_table": {
+    "pass": {
+      "rows": 47157,
+      "owner_known": 47157,
+      "eligible": 47132,
+      "same_actor": 3449,
+      "same_actor_rate": 0.07317745905117543,
+      "encoded_age_median": 0.196533203125
+    },
+    "carry_touch": {
+      "rows": 6772,
+      "owner_known": 6757,
+      "eligible": 6753,
+      "same_actor": 2677,
+      "same_actor_rate": 0.39641640752258256,
+      "encoded_age_median": 0.239501953125
+    },
+    "other_open_play": {
+      "rows": 10765,
+      "owner_known": 10241,
+      "eligible": 10229,
+      "same_actor": 2139,
+      "same_actor_rate": 0.2091113500830971,
+      "encoded_age_median": 0.339111328125
+    },
+    "no_open_play": 272
+  },
+  "training_table": {
+    "pass": {
+      "rows": 220248,
+      "owner_known": 220243,
+      "eligible": 220191,
+      "same_actor": 14999,
+      "same_actor_rate": 0.06811813380201734,
+      "encoded_age_median": 0.1959228515625
+    },
+    "carry_touch": {
+      "rows": 30302,
+      "owner_known": 30277,
+      "eligible": 30260,
+      "same_actor": 11782,
+      "same_actor_rate": 0.38935888962326504,
+      "encoded_age_median": 0.2396240234375
+    },
+    "other_open_play": {
+      "rows": 51054,
+      "owner_known": 48777,
+      "eligible": 48755,
+      "same_actor": 10688,
+      "same_actor_rate": 0.219218541688032,
+      "encoded_age_median": 0.3408203125
+    },
+    "no_open_play": 1278
+  },
+  "actor_nll": {
+    "baseline": 2.3456598433706044,
+    "last_owner": 2.3456373819502483,
+    "family_interaction": 2.3000905004675207
+  },
+  "gain": {
+    "last_owner": {
+      "mean": 2.246142035579056e-05,
+      "ci95": [
+        -3.80251864657802e-05,
+        8.530262025118086e-05
+      ]
+    },
+    "family_interaction": {
+      "mean": 0.04554688148272763,
+      "ci95": [
+        0.041189720031289095,
+        0.05004516608771592
+      ]
+    }
+  }
+}

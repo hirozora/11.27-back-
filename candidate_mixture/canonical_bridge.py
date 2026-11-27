@@ -122,6 +122,27 @@ def alternate(backup_data, folders, keys, players, true_players, labels):
     return out, control
 
 
+def joint_alternates(folders, keys, players, act_slot):
+    out, control = {}, None
+    for mode, folder in zip(("off", "on"), folders, strict=True):
+        cfg = json.loads((folder / "protocol.json").read_text())
+        if cfg["ownership"] != mode:
+            raise ValueError(f"Wrong ownership configuration: {folder}")
+        similar = {k: v for k, v in cfg.items() if k not in ("ownership", "best_epoch")}
+        if control is not None and similar != control:
+            raise ValueError("Joint fits must use identical seeds and budgets")
+        control = similar
+        with np.load(folder / "actor_weights.npz", allow_pickle=False) as a:
+            take = exact(keys, ids(a["match"], a["event"]))
+            q = reorder_q(players, a["player"][take], a["q"][take])
+        with np.load(folder / "validation.npz", allow_pickle=False) as a:
+            take = exact(keys, ids(a["match"], a["event"]))
+            np.testing.assert_allclose(score(q, act_slot), a["scores"][take, 0],
+                                       atol=3e-5, rtol=1e-5)
+        out[mode] = q
+    return out, dict(control, architecture="canonical_joint_ownership")
+
+
 def score(p, y):
     return -np.log(p[np.arange(len(y)), y].astype(np.float64))
 
@@ -165,7 +186,10 @@ def run(a):
         joint = p["joint"][archived]
     np.testing.assert_allclose(joint.sum((1, 2)), 1, atol=1e-6)
     q_old = joint.sum(2)
-    alternatives, cfg = alternate(a.backup_data, (a.off, a.on), keys, players, true_players, label10)
+    if a.joint_ownership:
+        alternatives, cfg = joint_alternates((a.off, a.on), keys, players, act_slot)
+    else:
+        alternatives, cfg = alternate(a.backup_data, (a.off, a.on), keys, players, true_players, label10)
     qs = dict(old=q_old, **alternatives)
     crossed, exchangeable = role_counterfactuals(qs["off"], qs["on"], group[valid], roster)
     all_qs = dict(qs, **crossed)
@@ -246,13 +270,16 @@ def self_test():
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--self-test", action="store_true")
-    names = "canonical data matches archive backup-data off on out".split()
+    p.add_argument("--joint-ownership", action="store_true")
+    p.add_argument("--backup-data", type=Path)
+    names = "canonical data matches archive off on out".split()
     for name in names:
         p.add_argument("--" + name, type=Path)
     args = p.parse_args()
     if args.self_test:
         self_test()
-    elif all(getattr(args, name.replace("-", "_")) is not None for name in names):
+    elif (all(getattr(args, name) is not None for name in names)
+          and (args.joint_ownership != (args.backup_data is not None))):
         torch.set_num_threads(1)
         run(args)
     else:
