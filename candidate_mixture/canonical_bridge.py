@@ -34,6 +34,34 @@ def replace_actor(joint, q, mask):
     return changed
 
 
+def role_counterfactuals(q0, q1, group, mask):
+    """Cross group mass and within-group conditional weights; unknowns are singleton groups."""
+    if not np.isin(group[mask], np.arange(8)).all():
+        raise ValueError("Invalid canonical role labels")
+    known = (group < 7) & mask
+    same = ((group[:, :, None] == group[:, None, :]) &
+            known[:, :, None] & known[:, None, :])
+    same |= np.eye(group.shape[1], dtype=bool)[None] & mask[:, :, None]
+    mass = [np.einsum("nij,nj->ni", same, q) for q in (q0, q1)]
+    cond = [q / np.where(mask, m, 1) for q, m in zip((q0, q1), mass, strict=True)]
+    off_role = mass[0] * cond[1]
+    on_role = mass[1] * cond[0]
+    for q, m in zip((off_role, on_role), mass, strict=True):
+        np.testing.assert_allclose(q.sum(1), 1, atol=1e-6)
+        np.testing.assert_allclose(np.einsum("nij,nj->ni", same, q), m, atol=1e-7, rtol=1e-6)
+    return {"q01": off_role, "q10": on_role}, (same.sum(2) > 1).any(1)
+
+
+def role_decompose(l00, l01, l10, l11, match):
+    between = .5 * ((l00 - l10) + (l01 - l11))
+    within = .5 * ((l00 - l01) + (l10 - l11))
+    np.testing.assert_allclose(between + within, l00 - l11, atol=1e-12)
+    return {"between_role_mass": paired(between, match),
+            "within_role_weighting": paired(within, match),
+            "cells_nll": {k: float(v.mean()) for k, v in zip(
+                ("q00", "q01", "q10", "q11"), (l00, l01, l10, l11), strict=True)}}
+
+
 def ids(match, event):
     key = pd.MultiIndex.from_arrays((match, event))
     if not key.is_unique:
@@ -139,7 +167,9 @@ def run(a):
     q_old = joint.sum(2)
     alternatives, cfg = alternate(a.backup_data, (a.off, a.on), keys, players, true_players, label10)
     qs = dict(old=q_old, **alternatives)
-    weights = {name: torch.from_numpy(replace_actor(joint, q, roster)) for name, q in qs.items()}
+    crossed, exchangeable = role_counterfactuals(qs["off"], qs["on"], group[valid], roster)
+    all_qs = dict(qs, **crossed)
+    weights = {name: torch.from_numpy(replace_actor(joint, q, roster)) for name, q in all_qs.items()}
     _, _, rp, pp, person_key = action_profiles(pd.read_parquet(a.matches),
                                                 match, val, slot, zone, action, player, group)
     losses, replay = {}, {}
@@ -168,12 +198,17 @@ def run(a):
               "replay_max_abs": replay, "actor_nll": {}, "action": {}}
     for k, q in qs.items():
         report["actor_nll"][k] = float(score(q, act_slot).mean())
+    order = ("off", "q01", "q10", "on")
+    report["same_known_role_rows"] = int(exchangeable.sum())
+    report["actor_role_decomposition"] = role_decompose(*(score(all_qs[k], act_slot) for k in order), m)
     report["actor_ownership_gain"] = paired(score(qs["off"], act_slot) - score(qs["on"], act_slot), m)
     for j, granularity in enumerate(("13", "10")):
         l = {k: v[j] for k, v in losses.items()}
         gain = {k: l["role", k] - l["personal", k] for k in qs}
         report["action"][granularity] = {
             "nll": {arm: {k: float(l[arm, k].mean()) for k in qs} for arm in ("role", "personal")},
+            "role_decomposition": {arm: role_decompose(*(l[arm, k] for k in order), m)
+                                   for arm in ("role", "personal")},
             "personal_gain": {k: paired(v, m) for k, v in gain.items()},
             "ownership_gain": {arm: paired(l[arm, "off"] - l[arm, "on"], m)
                                for arm in ("role", "personal")},
@@ -198,6 +233,13 @@ def self_test():
         pass
     else:
         raise AssertionError("Mismatched roster accepted")
+    q0 = np.array([[.20, .30, .15, .35, 0]])
+    q1 = np.array([[.45, .15, .30, .10, 0]])
+    cross, exchangeable = role_counterfactuals(q0, q1, np.array([[1, 1, 7, 7, 7]]), q0 > 0)
+    np.testing.assert_allclose(cross["q01"], [[.375, .125, .15, .35, 0]])
+    np.testing.assert_allclose(cross["q10"], [[.24, .36, .30, .10, 0]])
+    assert exchangeable.item()
+    print("PASS: role decomposition with unknown-role singletons")
     print("PASS: order, zero padding, conditional zones, folded classes, mismatched roster")
 
 

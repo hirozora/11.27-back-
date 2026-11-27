@@ -26,3 +26,7 @@
 5. **升级规则。** 若关系改善 q 但不改善动作边缘，优先诊断不同读出和 r，而非直接换 Transformer；有边缘增益之后再匹配信息和容量比较 Transformer。赛前倾向、个人序列和图结构应独立加入。
 
 英文定位：*We study whether candidate-specific, time-varying player states built from visible event histories improve next-action classification when the next actor is unknown. Given the target team and query time, we supervise a distribution over eligible actors and marginalize an actor-conditioned action distribution over that roster.* 不据本轮检索宣称首个球员嵌入、首个 actor-first 或首创概率混合。
+
+### 什么时候才可以加入传球终点、接球人和 SPADL 事件？
+
+[ELASTIC §2.1](https://arxiv.org/html/2608.30227v2)解决的是离线事件与追踪对齐。它在相邻事件之间插入接球事件时，可以使用后一事件的执行者。[socceraction 的 Wyscout 转换器](https://github.com/ML-KULeuven/socceraction/blob/master/socceraction/spadl/wyscout.py)也会用后续越位记录修正较早的传球，并插入合成带球。这些是合理的离线标注，不天然是预测时可用的输入。给原事件加两秒延迟不保证其派生字段已知。如果以后纳入它们，应在原始层截断或扰动所有未到可见阈值的记录，重新转换，检查每个查询的输入不变；只有全部依赖记录都可见时才使用相应派生字段。这里没有发现现有起点及归属位做法有此问题。
